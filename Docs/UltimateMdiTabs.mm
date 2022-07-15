@@ -50,5 +50,39 @@
 </node>
 </node>
 </node>
+<node CREATED="1655223334244" FOLDED="true" ID="ID_999152827" MODIFIED="1655486519403" POSITION="right" TEXT="Changes">
+<node CREATED="1655223341347" ID="ID_584226409" MODIFIED="1655481368313" TEXT="ManualText property refactored to ProvideText virtual method"/>
+<node CREATED="1655223369659" ID="ID_265611139" MODIFIED="1655223381255" TEXT="Window object can be optionally derived as class"/>
+<node CREATED="1655223381620" ID="ID_769016564" MODIFIED="1655223407072" TEXT="&amp;Window reference passed into both Window and Frame class via their Init methods"/>
+<node CREATED="1655223421956" ID="ID_10310991" MODIFIED="1655224318865" TEXT="As a default, Window object is not instantiated for Reports"/>
+<node CREATED="1655228096094" ID="ID_899249255" MODIFIED="1655228123130" TEXT="Frame.SheetFeq{PROP:ChoiceFEQ} always returns last tab, but CHOICE(SELF.SheetFeq) works"/>
+<node CREATED="1655224587348" FOLDED="true" ID="ID_1636108596" MODIFIED="1655481171990" TEXT="SYSTEM{PROP:Active} is read-only, so using Window{PROP:Active} instead">
+<node CREATED="1655227984229" ID="ID_1556116701" MODIFIED="1655228084200">
+<richcontent TYPE="NODE"><html>
+  <head>
+    
+  </head>
+  <body>
+    <p>
+      Try:
+    </p>
+    <p>
+      <font face="Consolas">&#160;&#160;&#160;SETTARGET(, NewActiveThread) </font>
+    </p>
+    <p>
+      <font face="Consolas">&#160;&#160;&#160;0{PROP:Active} = True </font>
+    </p>
+    <p>
+      <font face="Consolas">&#160;&#160;&#160;SETTARGET()</font><br />
+    </p>
+  </body>
+</html></richcontent>
+</node>
+</node>
+</node>
+<node CREATED="1655234472770" ID="ID_1456627770" MODIFIED="1655234474542" POSITION="right" TEXT="TODO">
+<node CREATED="1655234474969" ID="ID_934146819" MODIFIED="1655486524497" TEXT="Add icons"/>
+<node CREATED="1655234477832" ID="ID_816268294" MODIFIED="1655234483605" TEXT="Bold text of active tab"/>
+</node>
 </node>
 </map>
