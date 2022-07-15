@@ -20,6 +20,7 @@ IsDead                        BOOL(FALSE)
 
 !==============================================================================
 StackQ                        QUEUE,TYPE
+Icon                            STRING(FILE:MaxFilePath)
 Text                            STRING(1000)
                               END
 
@@ -27,6 +28,7 @@ ThreadQ                       QUEUE
 Thread                          SIGNED
 TabFeq                          SIGNED
 IsHidden                        BOOL
+Icon                            STRING(FILE:MaxFilePath)
 Text                            STRING(1000)
 StackQ                          &StackQ
                               END
@@ -52,6 +54,8 @@ SetFrameThread                  PROCEDURE(SIGNED Thread)
 Push                            PROCEDURE
 Pop                             PROCEDURE
 
+SetIconText                     PROCEDURE(<STRING Icon>,<STRING Text>)
+SetIcon                         PROCEDURE(STRING Icon)
 SetText                         PROCEDURE(STRING Text)
 HideTab                         PROCEDURE(BOOL IsHidden=TRUE)
 UnhideTab                       PROCEDURE
@@ -189,6 +193,7 @@ Sync.Push                     PROCEDURE
     ASSERT(False, 'Missing thread #'& THREAD() &' for UltimateMdiTabs/Sync.Push')
   ELSE
     CLEAR(ThreadQ.StackQ)
+    ThreadQ.StackQ.Icon = ThreadQ.Icon
     ThreadQ.StackQ.Text = ThreadQ.Text
     ADD(ThreadQ.StackQ)
   END
@@ -208,6 +213,7 @@ Sync.Pop                      PROCEDURE
   ELSE
     GET(ThreadQ.StackQ, RECORDS(ThreadQ.StackQ))
 
+    ThreadQ.Icon = ThreadQ.StackQ.Icon
     ThreadQ.Text = ThreadQ.StackQ.Text
     PUT(ThreadQ)
 
@@ -217,18 +223,31 @@ Sync.Pop                      PROCEDURE
   SELF.Sync.Release()
   
 !==============================================================================
-Sync.SetText                  PROCEDURE(STRING Text)
+Sync.SetIconText              PROCEDURE(<STRING Icon>,<STRING Text>)
   CODE
+  IF OMITTED(Icon) AND OMITTED(Text) THEN RETURN.
+  
   IF IsDead THEN RETURN.
   SELF.Sync.Wait()
 
   IF SELF.FetchThreadQ() = Level:Benign
-    ThreadQ.Text = Text
+    IF NOT OMITTED(Icon) THEN ThreadQ.Icon = Icon.
+    IF NOT OMITTED(Text) THEN ThreadQ.Text = Text.
     PUT(ThreadQ)
     SELF.UpdateTabs()
   END
 
   SELF.Sync.Release()
+
+!==============================================================================
+Sync.SetIcon                  PROCEDURE(STRING Icon)
+  CODE
+  SELF.SetIconText(Icon)
+
+!==============================================================================
+Sync.SetText                  PROCEDURE(STRING Text)
+  CODE
+  SELF.SetIconText(, Text)
 
 !==============================================================================
 Sync.HideTab                  PROCEDURE(BOOL IsHidden=TRUE)
@@ -277,8 +296,9 @@ ThreadInstance.Destruct       PROCEDURE
   
 !==============================================================================
 !==============================================================================
-UltimateMdiTabsFrame.Init     PROCEDURE(SIGNED SheetFeq)
+UltimateMdiTabsFrame.Init     PROCEDURE(*WINDOW Window,SIGNED SheetFeq)
   CODE
+  SELF.Window                &= Window
   SELF.SheetFeq               = SheetFeq
   SELF.SheetFeq{PROP:NoSheet} = TRUE
   Sync.SetFrameThread(THREAD())
@@ -289,6 +309,15 @@ UltimateMdiTabsFrame.DestroyTab   PROCEDURE(SIGNED TabFeq)
   IF TabFeq <> 0 AND TabFeq{PROP:Type} = CREATE:Tab
     DESTROY(TabFeq)
   END
+
+!==============================================================================
+UltimateMdiTabsFrame.SwitchBold  PROCEDURE(SIGNED TabFeq)
+  CODE
+  IF SELF.BoldTabFeq <> 0 AND SELF.BoldTabFeq{PROP:Type} = CREATE:Tab
+    SELF.BoldTabFeq{PROP:Font, 4} = BXOR(SELF.BoldTabFeq{PROP:Font, 4}, FONT:Bold)
+  END
+  TabFeq{PROP:Font, 4} = BOR(TabFeq{PROP:Font, 4}, FONT:Bold)
+  SELF.BoldTabFeq = TabFeq
 
 !==============================================================================
 UltimateMdiTabsFrame.TakeEvent    PROCEDURE
@@ -312,24 +341,28 @@ NotifyParameter                     LONG
 
 !==============================================================================
 UltimateMdiTabsFrame.TakeNewSelection PROCEDURE
+TabFeq                                  SIGNED,AUTO
 NewActiveThread                         SIGNED(0)
-ThreadIndex                             SIGNED,AUTO
   CODE
-  Sync.Wait()
+  TabFeq = SELF.SheetFeq{PROP:Child, Choice(SELF.SheetFeq)}  !SELF.SheetFeq{PROP:ChoiceFEQ} doesn't work, but this does. Thanks, Carl Barnes!
+  DO FindNewActiveThread
+  IF NewActiveThread
+    DO ActivateNewThread
+  END
 
-  ThreadQ.TabFeq = SELF.SheetFeq{PROP:ChoiceFEQ}
-  !STOP(ThreadQ.TabFeq)
+FindNewActiveThread           ROUTINE
+  Sync.Wait()
+  ThreadQ.TabFeq = TabFeq
   GET(ThreadQ, ThreadQ.TabFeq)
-  IF ERRORCODE() = NoError  |
-      AND ThreadQ.Thread <> SYSTEM{PROP:Active}
+  IF ERRORCODE() = NoError AND ThreadQ.Thread <> SYSTEM{PROP:Active}
     NewActiveThread = ThreadQ.Thread
   END
-
   Sync.Release()
 
-  IF NewActiveThread <> 0
-    SYSTEM{PROP:Active} = NewActiveThread
-  END
+ActivateNewThread             ROUTINE
+  SETTARGET(, NewActiveThread)
+  0{PROP:Active} = True
+  SETTARGET()
 
 !==============================================================================
 UltimateMdiTabsFrame.UpdateTabs   PROCEDURE(SIGNED NotifyThread,LONG NotifyParameter)
@@ -373,15 +406,18 @@ CreateTab                     ROUTINE
   ThreadQ.TabFeq = CREATE(0, CREATE:Tab, SELF.SheetFeq)
   ThreadQ.TabFeq{PROP:Hide} = FALSE
   PUT(ThreadQ)
+  SELF.SwitchBold(ThreadQ.TabFeq)
   !STOP(ThreadQ.TabFeq)
 
 SelectTab                     ROUTINE
   IF SELF.SheetFeq{PROP:ChoiceFEQ} <> ThreadQ.TabFeq
     SELF.SheetFeq{PROP:ChoiceFEQ} = ThreadQ.TabFeq
+    SELF.SwitchBold(ThreadQ.TabFeq)
   END
 
 SetTabText                    ROUTINE
   IF ThreadQ.TabFeq{PROP:Text} <> ThreadQ.Text
+    ThreadQ.TabFeq{PROP:Icon} = ThreadQ.Icon
     ThreadQ.TabFeq{PROP:Text} = ThreadQ.Text
   END
 
@@ -397,14 +433,48 @@ UltimateMdiTabsWindow.Destruct    PROCEDURE
   Sync.Pop()
   
 !==============================================================================
-UltimateMdiTabsWindow.SetText PROCEDURE(<STRING Text>)
+UltimateMdiTabsWindow.Init    PROCEDURE(<*WINDOW Window>)
   CODE
-  IF NOT OMITTED(Text)
-    Sync.SetText(Text)
-  ELSIF SELF.ManualText
-    Sync.SetText(SELF.ManualText)
+  IF OMITTED(Window)
+    SELF.Window &= NULL
   ELSE
-    Sync.SetText(0{PROP:Text})
+    SELF.Window &= Window
+  END
+
+!==============================================================================
+UltimateMdiTabsWindow.ProvideProp PROCEDURE(LONG Prop)!,STRING
+  CODE
+  IF SELF.Window &= NULL
+    RETURN 0{Prop}
+  ELSE
+    RETURN SELF.Window{Prop}
+  END
+  
+!==============================================================================
+UltimateMdiTabsWindow.ProvideIcon PROCEDURE!,STRING
+  CODE
+  RETURN Self.ProvideProp(PROP:Icon)
+  
+!==============================================================================
+UltimateMdiTabsWindow.ProvideText PROCEDURE!,STRING
+  CODE
+  RETURN Self.ProvideProp(PROP:Text)
+  
+!==============================================================================
+UltimateMdiTabsWindow.SetIconText PROCEDURE(<STRING Icon>,<STRING Text>)
+  CODE
+  IF OMITTED(Icon)
+    IF OMITTED(Text)
+      Sync.SetIconText(SELF.ProvideIcon(), SELF.ProvideText())
+    ELSE
+      Sync.SetIconText(SELF.ProvideIcon(), Text)
+    END
+  ELSE
+    IF OMITTED(Text)
+      Sync.SetIconText(Icon, SELF.ProvideText())
+    ELSE
+      Sync.SetIconText(Icon, Text)
+    END
   END
   
 !==============================================================================
@@ -425,16 +495,7 @@ UltimateMdiTabsWindow.TakeEvent   PROCEDURE
   OF EVENT:GainFocus
     Sync.SetActiveThread(THREAD())
   END
-  SELF.SetText()
+  SELF.SetIconText()
   !ST::Debug('Event: '& ST::DebugEventName())
-  
-!==============================================================================
-!UltimateMdiTabsWindow.GainFocus   PROCEDURE
-!  CODE
-!  Sync.SetActiveThread(THREAD())
-  
-!==============================================================================
-!UltimateMdiTabsWindow.SetActiveThread PROCEDURE
-!  CODE
   
 !==============================================================================
